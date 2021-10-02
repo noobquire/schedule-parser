@@ -10,13 +10,13 @@ export class ScheduleParser {
     }
 
     public parseSchedulePage(): Schedule {
-        let schedule = new Schedule();
+        const schedule = new Schedule();
     
-        let groupTitle = this.document.getElementById("ctl00_MainContent_lblHeader")!.innerHTML;
+        const groupTitle = this.document.getElementById("ctl00_MainContent_lblHeader")!.innerHTML;
         schedule.groupName = groupTitle.substr(19);
     
-        let firstWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_FirstScheduleTable");
-        let secondWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_SecondScheduleTable");
+        const firstWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_FirstScheduleTable");
+        const secondWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_SecondScheduleTable");
         schedule.firstWeek = this.getLessonsFromTable(firstWeekScheduleTable!);
         schedule.secondWeek = this.getLessonsFromTable(secondWeekScheduleTable!);
     
@@ -25,19 +25,19 @@ export class ScheduleParser {
 
     private getLessonsFromTable(scheduleTable: HTMLTableElement): Lesson[][][] {
         scheduleTable.deleteRow(0);
-        let lessons: Lesson[][][] = [];
+        const lessons: Lesson[][][] = [];
     
         for (let i = 0; i < 6; i++) {
             lessons.push([]);
             for (let j = 0; j < 6; j++) {
-                let scheduleCell = scheduleTable.rows[j].cells[i + 1];
-                let cellPairs = this.getLessonsInCell(scheduleCell);
-                cellPairs.forEach(p => {
+                const scheduleCell = scheduleTable.rows[j].cells[i + 1];
+                const celllessons = this.getLessonsInCell(scheduleCell);
+                celllessons.forEach(p => {
                     p.lessonId = j;
                     p.dayId = i;
                 });
                 lessons[i].push([]);
-                lessons[i][j].push(...cellPairs);
+                lessons[i][j].push(...celllessons);
             }
         }
     
@@ -49,33 +49,36 @@ export class ScheduleParser {
             return [];
         }
         
-        let pairNames = Array.from(cell
+        const lessonNames = Array.from(cell
             .getElementsByClassName("disLabel")[0].children)
             .map(a => (<HTMLElement>a).innerHTML);
 
             
-        let teachers = Array.from(
+        const teachers = Array.from(
             cell.querySelectorAll("a[href*=\"Schedules/ViewSchedule\"]"))
             .map(a => (<HTMLElement>a).innerHTML);
-        let rooms = Array.from(
-            cell.querySelectorAll("a[href*=\"maps.google.com\"]"))
+        const lessonInfos = Array.from(
+            cell.querySelectorAll("a[href*=\"maps.google.com\"]"));
+        const rooms = lessonInfos
             .map(a => (<HTMLElement>a).innerHTML.substr(0, (<HTMLElement>a).innerHTML.indexOf(' ')));
-        let pairTypes = Array.from(
-            cell.querySelectorAll("a[href*=\"maps.google.com\"]"))
+        const lessonTypes = lessonInfos
             .map(a => (<HTMLElement>a).innerHTML.substr((<HTMLElement>a).innerHTML.indexOf(' ') + 1));
+        const areOnlineLessons = lessonInfos
+            .map(a => (<HTMLElement>a).innerHTML.includes("on-line"));
     
-        var pairs = [];
-        for (let i = 0; i < pairNames.length; i++) {
-            var pair = new Lesson();
-            pair.subjectName = pairNames[i];
-            pair.teacherName = teachers[i];
-            pair.room = rooms.length == pairNames.length ? rooms[i] : rooms[0];
-            let lessonTypeString = pairTypes.length == pairNames.length ? pairTypes[i] : pairTypes[0];
-            pair.lessonType = this.parseLessonType(lessonTypeString);
-            pairs.push(pair);
+        const lessons = [];
+        for (let i = 0; i < lessonNames.length; i++) {
+            const lesson = new Lesson();
+            lesson.subjectName = lessonNames[i];
+            lesson.teacherName = teachers[i];
+            lesson.room = rooms.length == lessonNames.length ? rooms[i] : rooms[0];
+            const lessonTypeString = lessonTypes.length == lessonNames.length ? lessonTypes[i] : lessonTypes[0];
+            lesson.lessonType = this.parseLessonType(lessonTypeString);
+            lesson.isOnline = areOnlineLessons[i];
+            lessons.push(lesson);
         }
     
-        return pairs;
+        return lessons;
     }
 
     private parseLessonType(lessonTypeString: string): LessonType {

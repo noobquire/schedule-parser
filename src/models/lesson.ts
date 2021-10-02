@@ -4,7 +4,8 @@ export class Lesson {
     lessonId: number;
     dayId: number;
     room: string;
-    lessonType: LessonType
+    lessonType: LessonType;
+    isOnline: boolean;
 }
 
 export enum LessonType {

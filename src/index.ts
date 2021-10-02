@@ -7,8 +7,9 @@ import { writeFileSync } from 'fs';
 import { JSDOM } from 'jsdom';
 
 (async () => {
-    let groups = await getGroupsList();
-    let schedules: Schedule[] = [];
+    console.time("parsing rozklad.kpi.ua");
+    const groups = await getGroupsList();
+    const schedules: Schedule[] = [];
     for (const group of groups) {
         console.log(`Parsing schedule for group ${group}`);
         const schedule = await getGroupSchedule(group);
@@ -19,6 +20,7 @@ import { JSDOM } from 'jsdom';
     const jsonSchedulesData = JSON.stringify(schedules);
     writeFileSync("output.json", jsonSchedulesData);
     console.log("Wrote schedules to output.json");
+    console.timeEnd("parsing rozklad.kpi.ua");
 })()
 
 async function getGroupsList(): Promise<string[]> {

@@ -10,15 +10,26 @@ export class ScheduleParser {
     }
 
     public parseSchedulePage(): Schedule {
-        const schedule = new Schedule();
-
         const groupTitle = this.document.getElementById("ctl00_MainContent_lblHeader")!.innerHTML;
-        schedule.groupName = groupTitle.substr(19);
+        const groupName = groupTitle.substr(19);
+
+        const schedule = new Schedule(groupName);
 
         const firstWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_FirstScheduleTable");
         const secondWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_SecondScheduleTable");
-        schedule.firstWeek = this.getLessonsFromTable(firstWeekScheduleTable!);
-        schedule.secondWeek = this.getLessonsFromTable(secondWeekScheduleTable!);
+        const firstWeek = this.getLessonsFromTable(firstWeekScheduleTable!);
+        const secondWeek = this.getLessonsFromTable(secondWeekScheduleTable!);
+
+        for(let i = 0; i < 6; i++) {
+            const firstDay = schedule.firstWeek[i];
+            const secondDay = schedule.secondWeek[i];
+            for(let j = 0; j < 6; j++) {
+                const firstPair = firstDay.pairs[j];
+                const secondPair = secondDay.pairs[j];
+                firstPair.lessons = firstWeek[i][j];
+                secondPair.lessons = secondWeek[i][j];
+            }
+        }
 
         return schedule;
     }
@@ -32,10 +43,6 @@ export class ScheduleParser {
             for (let j = 0; j < 6; j++) {
                 const scheduleCell = scheduleTable.rows[j].cells[i + 1];
                 const celllessons = this.getLessonsInCell(scheduleCell);
-                celllessons.forEach(p => {
-                    p.lessonId = j;
-                    p.dayId = i;
-                });
                 lessons[i].push([]);
                 lessons[i][j].push(...celllessons);
             }

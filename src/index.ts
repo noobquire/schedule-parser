@@ -16,6 +16,13 @@ import { JSDOM } from 'jsdom';
             schedules.push(schedule);
         }
     }
+
+    Date.prototype.toJSON = function(){
+        const hoursDiff = this.getHours() - this.getTimezoneOffset() / 60;
+        this.setHours(hoursDiff);
+        return this.toISOString();
+    };
+
     const jsonSchedulesData = JSON.stringify(schedules);
     writeFileSync("output.json", jsonSchedulesData);
     console.log("Wrote schedules to output.json");

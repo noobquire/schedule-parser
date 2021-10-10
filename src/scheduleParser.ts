@@ -20,6 +20,7 @@ export class ScheduleParser {
         const firstWeek = this.getLessonsFromTable(firstWeekScheduleTable!);
         const secondWeek = this.getLessonsFromTable(secondWeekScheduleTable!);
 
+        // fill schedule from array
         for(let i = 0; i < 6; i++) {
             const firstDay = schedule.firstWeek[i];
             const secondDay = schedule.secondWeek[i];

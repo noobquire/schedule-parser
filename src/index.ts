@@ -31,7 +31,7 @@ async function getGroupsList(): Promise<string[]> {
 
     const groups = (<GroupsResponse><unknown>response.data).d;
 
-    const groupRegex = /І[А-Я]-\d\d(?!ф)(мп|мн)?/; // только группы очки бакалаврата и магистров ФИВТ
+    const groupRegex = /І[А-Я]-\d\d(?!ф)(мп|мн)?/; // daytime bachelor and master groups of FICT
     return groups.filter(g => groupRegex.test(g));
 }
 

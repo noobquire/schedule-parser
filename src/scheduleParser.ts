@@ -11,22 +11,22 @@ export class ScheduleParser {
 
     public parseSchedulePage(): Schedule {
         const schedule = new Schedule();
-    
+
         const groupTitle = this.document.getElementById("ctl00_MainContent_lblHeader")!.innerHTML;
         schedule.groupName = groupTitle.substr(19);
-    
+
         const firstWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_FirstScheduleTable");
         const secondWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_SecondScheduleTable");
         schedule.firstWeek = this.getLessonsFromTable(firstWeekScheduleTable!);
         schedule.secondWeek = this.getLessonsFromTable(secondWeekScheduleTable!);
-    
+
         return schedule;
     }
 
     private getLessonsFromTable(scheduleTable: HTMLTableElement): Lesson[][][] {
         scheduleTable.deleteRow(0);
         const lessons: Lesson[][][] = [];
-    
+
         for (let i = 0; i < 6; i++) {
             lessons.push([]);
             for (let j = 0; j < 6; j++) {
@@ -40,7 +40,7 @@ export class ScheduleParser {
                 lessons[i][j].push(...celllessons);
             }
         }
-    
+
         return lessons;
     }
 
@@ -48,12 +48,12 @@ export class ScheduleParser {
         if (cell.getElementsByClassName("disLabel")[0] == undefined) {
             return [];
         }
-        
+
         const lessonNames = Array.from(cell
             .getElementsByClassName("disLabel")[0].children)
             .map(a => (<HTMLElement>a).innerHTML);
 
-            
+
         const teachers = Array.from(
             cell.querySelectorAll("a[href*=\"Schedules/ViewSchedule\"]"))
             .map(a => (<HTMLElement>a).innerHTML);
@@ -65,23 +65,31 @@ export class ScheduleParser {
             .map(a => (<HTMLElement>a).innerHTML.substr((<HTMLElement>a).innerHTML.indexOf(' ') + 1));
         const areOnlineLessons = lessonInfos
             .map(a => (<HTMLElement>a).innerHTML.includes("on-line"));
-    
+
         const lessons = [];
         for (let i = 0; i < lessonNames.length; i++) {
             const lesson = new Lesson();
             lesson.subjectName = lessonNames[i];
-            lesson.teacherName = teachers[i];
-            lesson.room = rooms.length == lessonNames.length ? rooms[i] : rooms[0];
-            const lessonTypeString = lessonTypes.length == lessonNames.length ? lessonTypes[i] : lessonTypes[0];
+            lesson.teacherName = i >= teachers.length ?
+                teachers[teachers.length - 1] :
+                teachers[i];
+            lesson.room = i >= rooms.length ?
+                rooms[rooms.length - 1] :
+                rooms[i];
+            const lessonTypeString = i >= lessonTypes.length ?
+                lessonTypes[lessonTypes.length - 1] :
+                lessonTypes[i];
             lesson.lessonType = this.parseLessonType(lessonTypeString);
-            lesson.isOnline = areOnlineLessons[i];
+            lesson.isOnline = i >= areOnlineLessons.length ?
+                areOnlineLessons[areOnlineLessons.length - 1] :
+                areOnlineLessons[i];
             lessons.push(lesson);
         }
-    
+
         return lessons;
     }
 
-    private parseLessonType(lessonTypeString: string): LessonType {
+    private parseLessonType(lessonTypeString: string | undefined): LessonType {
         switch (lessonTypeString) {
             case "Лек":
                 return LessonType.Lecture;

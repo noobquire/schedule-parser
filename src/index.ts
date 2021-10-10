@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { GroupDetailsResponse } from './models/groupDetailsResponse';
 import { GroupsResponse } from './models/groupsResponse';
 import { Schedule } from './models/schedule';
 import { ScheduleParser } from './scheduleParser';
@@ -35,17 +34,33 @@ async function getGroupsList(): Promise<string[]> {
     return groups.filter(g => groupRegex.test(g));
 }
 
-async function getGroupScheduleUrl(groupName: string): Promise<string> {
-    const getScheduleUrl = "https://api.rozklad.org.ua/v2/groups/" + encodeURIComponent(groupName);
+async function getGroupScheduleHtml(groupName: string): Promise<string> {
+    const getScheduleUrl = "http://rozklad.kpi.ua/Schedules/ScheduleGroupSelection.aspx";
 
-    const response = await axios.get<GroupDetailsResponse>(getScheduleUrl);
-    return response.data.data.group_url;
+    const validationToken = "/wEdAAEAAAD/////AQAAAAAAAAAPAQAAAAUAAAAIsA3rWl3AM+6E94I5Tu9cRJoVjv0LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHfLZVQO6kVoZVPGurJN4JJIAuaU";
+    const query = new URLSearchParams();
+    query.append("__EVENTARGUMENT", "");
+    query.append("__EVENTTARGET", "");
+    query.append("__EVENTVALIDATION", validationToken);
+    query.append("ctl00$MainContent$ctl00$btnShowSchedule", "Розклад занять");
+    query.append("ctl00$MainContent$ctl00$txtboxGroup", groupName);
+    const queryString = query.toString();
+
+    const config = {
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+    };
+
+    const response = await axios.post(getScheduleUrl, queryString, config);
+    return <string><unknown>response.data;
 }
 
 async function getGroupSchedule(groupName: string): Promise<Schedule | undefined> {
     try {
-        const scheduleUrl = await getGroupScheduleUrl(groupName);
-        const document = (await JSDOM.fromURL(scheduleUrl)).window.document;
+        const scheduleHtml = await getGroupScheduleHtml(groupName);
+        const document = new JSDOM(scheduleHtml).window.document;
+        // TODO: Check if we got schedule page or group list page
         const scheduleParser = new ScheduleParser(document);
 
         return scheduleParser.parseSchedulePage();

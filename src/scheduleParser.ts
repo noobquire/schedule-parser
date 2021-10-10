@@ -53,7 +53,6 @@ export class ScheduleParser {
             .getElementsByClassName("disLabel")[0].children)
             .map(a => (<HTMLElement>a).innerHTML);
 
-
         const teachers = Array.from(
             cell.querySelectorAll("a[href*=\"Schedules/ViewSchedule\"]"))
             .map(a => (<HTMLElement>a).innerHTML);

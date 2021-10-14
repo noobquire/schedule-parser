@@ -1,9 +1,9 @@
 import { Day, Days } from "./day";
 
 export class Schedule {
+    groupName: string;
     firstWeek: Day[];
     secondWeek: Day[];
-    groupName: string;
 
     constructor(groupName: string) {
         this.firstWeek = this.createWeek();

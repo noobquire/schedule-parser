@@ -5,8 +5,13 @@ import { ScheduleParser } from './scheduleParser';
 import { writeFileSync } from 'fs';
 import { JSDOM } from 'jsdom';
 
+const getScheduleUrl = "http://rozklad.kpi.ua/Schedules/ScheduleGroupSelection.aspx";
+const ukrainianAlphabet = "абвгдеєжзиіїйклмнопрстуфхцчшщюя";
+let validationToken: string;
+
 (async () => {
     console.time("parsing rozklad.kpi.ua");
+    validationToken = await getValidationToken();
     const groups = await getGroupsList();
     const schedules: Schedule[] = [];
     for (const group of groups) {
@@ -30,7 +35,7 @@ import { JSDOM } from 'jsdom';
 })()
 
 async function getGroupsList(): Promise<string[]> {
-    const groupsUrl = "http://rozklad.kpi.ua/Schedules/ScheduleGroupSelection.aspx/GetGroups";
+    const groupsUrl = getScheduleUrl + "/GetGroups";
     const response = await axios.post(groupsUrl, {
         prefixText: "І"
     });
@@ -41,11 +46,16 @@ async function getGroupsList(): Promise<string[]> {
     return groups.filter(g => groupRegex.test(g));
 }
 
-async function getGroupScheduleHtml(groupName: string): Promise<string> {
-    const getScheduleUrl = "http://rozklad.kpi.ua/Schedules/ScheduleGroupSelection.aspx";
+async function getValidationToken(): Promise<string> {
+    const responseHtml = await axios.get<string>(getScheduleUrl);
+    const document = new JSDOM(responseHtml.data).window.document;
+    
+    const eventValidation = <HTMLInputElement>document.getElementById("__EVENTVALIDATION");
+    
+    return eventValidation.value;
+}
 
-    // TODO: Token might change, get it from form instead of hardcoding
-    const validationToken = "/wEdAAEAAAD/////AQAAAAAAAAAPAQAAAAUAAAAIsA3rWl3AM+6E94I5Tu9cRJoVjv0LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHfLZVQO6kVoZVPGurJN4JJIAuaU";
+async function getGroupScheduleHtml(groupName: string): Promise<string> {
     const query = new URLSearchParams();
     query.append("__EVENTARGUMENT", "");
     query.append("__EVENTTARGET", "");

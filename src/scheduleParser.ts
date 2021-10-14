@@ -13,8 +13,11 @@ export class ScheduleParser {
         const schedule = new Schedule();
 
         const firstWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_FirstScheduleTable");
-        const secondWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_SecondScheduleTable");
+        if(firstWeekScheduleTable.rows.length != 7) {
+            return schedule;
+        }
         const firstWeek = this.getLessonsFromTable(firstWeekScheduleTable!);
+        const secondWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_SecondScheduleTable");
         const secondWeek = this.getLessonsFromTable(secondWeekScheduleTable!);
 
         // fill schedule from array
@@ -39,7 +42,7 @@ export class ScheduleParser {
         for (let i = 0; i < 6; i++) {
             lessons.push([]);
             for (let j = 0; j < 6; j++) {
-                const scheduleCell = scheduleTable.rows[j].cells[i + 1];
+                const scheduleCell = scheduleTable.rows[j].cells[i + 1]; // !
                 const celllessons = this.getLessonsInCell(scheduleCell);
                 lessons[i].push([]);
                 lessons[i][j].push(...celllessons);
@@ -50,7 +53,7 @@ export class ScheduleParser {
     }
 
     private getLessonsInCell(cell: HTMLTableCellElement): Lesson[] {
-        if (cell.getElementsByClassName("disLabel")[0] == undefined) {
+        if (cell?.getElementsByClassName("disLabel")[0] == undefined) {
             return [];
         }
 

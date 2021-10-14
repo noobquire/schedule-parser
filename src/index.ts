@@ -1,6 +1,5 @@
 import axios, { AxiosResponse } from 'axios';
 import { GroupsResponse } from './models/groupsResponse';
-import { Schedule } from './models/schedule';
 import { ScheduleParser } from './scheduleParser';
 import { writeFileSync } from 'fs';
 import { JSDOM } from 'jsdom';
@@ -14,13 +13,18 @@ let validationToken: string;
 (async () => {
     console.time("parsing rozklad.kpi.ua");
     validationToken = await getValidationToken();
-    const groupNames = await getGroupsList();
-    const groups: Group[] = [];
-    for (const groupName of groupNames) {
-        console.log(`Parsing schedule for group ${groupName}`);
+    let groups: Group[] = [];
 
-        const parsedGroups = await getGroupSchedule(groupName);
-        groups.push(...parsedGroups!);
+    for (let i = 0; i < ukrainianAlphabet.length; i++) {
+        const firstLetter = ukrainianAlphabet[i];
+        const groupNames = await getGroupsList(firstLetter);
+
+        for (const groupName of groupNames) {
+            console.log(`Parsing schedule for group ${groupName}`);
+
+            const parsedGroups = await getGroupSchedule(groupName);
+            groups.push(...parsedGroups!);
+        }
     }
 
     Date.prototype.toJSON = function () {
@@ -28,23 +32,28 @@ let validationToken: string;
         this.setHours(hoursDiff);
         return this.toISOString();
     };
-
+    const groupsLengthBeforeFiltering: number = groups.length;
+    groups = groups.filter(g => !g.schedule.isEmpty());
+    const groupsLengthAfterFiltering: number = groups.length;
+    const removedGroupsCount: number = groupsLengthBeforeFiltering - groupsLengthAfterFiltering;
+    console.log(`Filtered ${removedGroupsCount} empty schedules`);
     const jsonSchedulesData = JSON.stringify(groups);
     writeFileSync("output.json", jsonSchedulesData);
-    console.log("Wrote schedules to output.json");
+    console.log(`Wrote ${groupsLengthAfterFiltering} schedules to output.json`);
     console.timeEnd("parsing rozklad.kpi.ua");
 })();
 
-async function getGroupsList(): Promise<string[]> {
+async function getGroupsList(firstLetter: string): Promise<string[]> {
     const groupsUrl = getScheduleUrl + "/GetGroups";
     const response = await axios.post(groupsUrl, {
-        prefixText: "І"
+        prefixText: firstLetter
     });
 
-    const groups = (<GroupsResponse><unknown>response.data).d;
+    const groups = (<GroupsResponse><unknown>response.data).d ?? [];
 
-    const groupRegex = /І[А-Я]-\d\d(?!ф)(мп|мн)?/; // daytime bachelor and master groups of FICT
-    return groups.filter(g => groupRegex.test(g));
+    return groups;
+    //const groupRegex = /І[А-Я]-\d\d(?!ф)(мп|мн)?/; // daytime bachelor and master groups of FICT
+    //return groups.filter(g => groupRegex.test(g));
 }
 
 async function getValidationToken(): Promise<string> {
@@ -78,6 +87,9 @@ async function getGroupScheduleResponse(groupName: string): Promise<AxiosRespons
 async function getGroupSchedule(groupName: string): Promise<Group[]> {
     try {
         const pageResponse = await getGroupScheduleResponse(groupName);
+        if(pageResponse.status == 404) {
+            return [];
+        }
         const document = new JSDOM(pageResponse.data).window.document;
         const groupSelectionParser = new GroupSelectionParser(document);
 
@@ -103,6 +115,7 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
 
     } catch (error) {
         console.error(error);
+        console.error((<Error>error).stack);
         return [];
     }
 }

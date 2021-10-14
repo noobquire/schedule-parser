@@ -10,10 +10,7 @@ export class ScheduleParser {
     }
 
     public parseSchedulePage(): Schedule {
-        const groupTitle = this.document.getElementById("ctl00_MainContent_lblHeader")!.innerHTML;
-        const groupName = groupTitle.substr(19);
-
-        const schedule = new Schedule(groupName);
+        const schedule = new Schedule();
 
         const firstWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_FirstScheduleTable");
         const secondWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_SecondScheduleTable");

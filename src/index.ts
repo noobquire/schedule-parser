@@ -21,7 +21,6 @@ let validationToken: string;
 
         for (const groupName of groupNames) {
             console.log(`Parsing schedule for group ${groupName}`);
-
             const parsedGroups = await getGroupSchedule(groupName);
             groups.push(...parsedGroups!);
         }
@@ -88,14 +87,23 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
     try {
         const pageResponse = await getGroupScheduleResponse(groupName);
         if(pageResponse.status == 404) {
+
             return [];
         }
+        
         const document = new JSDOM(pageResponse.data).window.document;
         const groupSelectionParser = new GroupSelectionParser(document);
 
         if (groupSelectionParser.isGroupSelectionPage()) {
             const groups = groupSelectionParser.parseGroupsList();
+
+            if(groups.length == 0) {
+                console.warn(`Could not resolve group ${groupName}, skipping`);
+                return groups;
+            }
+
             console.warn(`Resolved ${groups.length} conflicting group names: ${groups.map(g => g.name).join(', ')}`)
+            
             for (const group of groups) {
                 const groupPageHtml = await axios.get<string>(group.scheduleUrl);
                 const groupDocument = new JSDOM(groupPageHtml.data).window.document;
@@ -103,14 +111,17 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
                 const schedule = scheduleParser.parseSchedulePage();
                 group.schedule = schedule;
             }
+
             return groups;
         }
 
         const scheduleParser = new ScheduleParser(document);
         const schedule = scheduleParser.parseSchedulePage();
+
         const group = new Group(groupName);
         group.schedule = schedule;
         group.scheduleUrl = pageResponse.request.res.responseUrl!;
+
         return [group];
 
     } catch (error) {

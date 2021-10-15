@@ -13,7 +13,8 @@ export class ScheduleParser {
         const schedule = new Schedule();
 
         const firstWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_FirstScheduleTable");
-        if(firstWeekScheduleTable.rows.length != 7) {
+        if (![7, 8].includes(firstWeekScheduleTable.rows.length)) {
+            console.debug(`Received unexpected schedule table size: ${firstWeekScheduleTable.rows.length}`);
             return schedule;
         }
         const firstWeek = this.getLessonsFromTable(firstWeekScheduleTable!);
@@ -21,10 +22,10 @@ export class ScheduleParser {
         const secondWeek = this.getLessonsFromTable(secondWeekScheduleTable!);
 
         // fill schedule from array
-        for(let i = 0; i < 6; i++) {
+        for (let i = 0; i < 6; i++) {
             const firstDay = schedule.firstWeek[i];
             const secondDay = schedule.secondWeek[i];
-            for(let j = 0; j < 6; j++) {
+            for (let j = 0; j < 6; j++) {
                 const firstPair = firstDay.pairs[j];
                 const secondPair = secondDay.pairs[j];
                 firstPair.lessons = firstWeek[i][j];
@@ -42,7 +43,7 @@ export class ScheduleParser {
         for (let i = 0; i < 6; i++) {
             lessons.push([]);
             for (let j = 0; j < 6; j++) {
-                const scheduleCell = scheduleTable.rows[j].cells[i + 1]; // !
+                const scheduleCell = scheduleTable.rows[j].cells[i + 1];
                 const celllessons = this.getLessonsInCell(scheduleCell);
                 lessons[i].push([]);
                 lessons[i][j].push(...celllessons);

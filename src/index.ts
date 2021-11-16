@@ -104,7 +104,9 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
 
             console.warn(`Resolved ${groups.length} conflicting group names: ${groups.map(g => g.name).join(', ')}`)
             
-            for (const group of groups) {
+            for (let i = 0; i < groups.length; i++) {
+                const group = groups[i];
+                console.log(`(${i+1}/${groups.length}) Parsing schedule for group ${group.name}`);
                 const groupPageHtml = await axios.get<string>(group.scheduleUrl);
                 const groupDocument = new JSDOM(groupPageHtml.data).window.document;
                 const scheduleParser = new ScheduleParser(groupDocument);

@@ -1,5 +1,7 @@
 import { Lesson, LessonType } from "./models/lesson";
+import { LessonInfo } from "./models/lessonInfo";
 import { Schedule } from "./models/schedule";
+import { Teacher } from "./models/teacher";
 
 export class ScheduleParser {
 
@@ -53,44 +55,109 @@ export class ScheduleParser {
         return lessons;
     }
 
+    private parseLessonNames(cell: HTMLTableCellElement): string[] {
+        return Array.from(cell
+            .getElementsByClassName("disLabel")[0].children)
+            .map(a => (<HTMLElement>a).innerHTML);
+    }
+
+    private parseTeachers(cell: HTMLTableCellElement): Teacher[] {
+        const shortNames = Array.from(
+            cell.querySelectorAll("a[href*=\"Schedules/ViewSchedule\"]"))
+            .map(a => (<HTMLElement>a).innerHTML);
+        const fullNames = Array.from(
+            cell.querySelectorAll("a[href*=\"Schedules/ViewSchedule\"]"))
+            .map(a => (<HTMLElement>a).title);
+        const links = Array.from(
+            cell.querySelectorAll("a[href*=\"Schedules/ViewSchedule\"]"))
+            .map(a => (<HTMLLinkElement>a).href);
+
+        const teachers: Teacher[] = [];
+        for (let i = 0; i < shortNames.length; i++) {
+            const teacher = new Teacher();
+            teacher.shortName = shortNames[i];
+            teacher.fullName = fullNames[i];
+            teacher.scheduleLink = "http://rozklad.kpi.ua" + links[i];
+            teachers.push(teacher);
+        }
+        return teachers;
+    }
+
+    private parseLessonInfos(cell: HTMLTableCellElement): LessonInfo[] {
+        const infos: LessonInfo[] = [];
+        const lessonsInfoMatch = cell.innerHTML
+            .match("(<\/a><br>|<br> |(?<!<\/span>)<br>)+(.+)$");
+
+        if (lessonsInfoMatch == null) { // bs lesson without any infos
+            return infos;
+        }
+
+        const lessonInfos = lessonsInfoMatch![2]
+            .split(/(?!\d), (?!\d)/)
+            .map(s => s.trim());
+
+        for (const lessonInfoStr of lessonInfos) {
+            const lessonInfo = lessonInfoStr.includes("maps.google.com") ?
+                this.parseLinkInfo(lessonInfoStr) :
+                this.parsePlainInfo(lessonInfoStr);
+            infos.push(lessonInfo);
+        }
+
+        return infos;
+    }
+
+    private parsePlainInfo(lessonInfoStr: string): LessonInfo {
+        const lessonInfo = new LessonInfo();
+        lessonInfo.isOnline = lessonInfoStr.includes("on-line");
+        lessonInfo.lessonType = lessonInfoStr.split(" ")[0];
+        lessonInfo.roomNumber = "";
+
+        return lessonInfo;
+    }
+
+    private createHtmlElement(htmlString: string): HTMLElement {
+        const div = this.document.createElement("div");
+        div.innerHTML = htmlString.trim();
+        return <HTMLElement>div.firstChild!;
+    }
+
+    private parseLinkInfo(lessonInfoStr: string): LessonInfo {
+        const element = this.createHtmlElement(lessonInfoStr);
+
+        const room = element.innerHTML.substr(0, element.innerHTML.indexOf(' '));
+        const lessonType = element.innerHTML.substr(element.innerHTML.indexOf(' ') + 1);
+        const isOnlineLesson = element.innerHTML.includes("on-line");
+
+        const info = new LessonInfo();
+        info.isOnline = isOnlineLesson;
+        info.lessonType = lessonType;
+        info.roomNumber = room;
+        return info;
+    }
+
     private getLessonsInCell(cell: HTMLTableCellElement): Lesson[] {
         if (cell?.getElementsByClassName("disLabel")[0] == undefined) {
             return [];
         }
 
-        const lessonNames = Array.from(cell
-            .getElementsByClassName("disLabel")[0].children)
-            .map(a => (<HTMLElement>a).innerHTML);
-
-        const teachers = Array.from(
-            cell.querySelectorAll("a[href*=\"Schedules/ViewSchedule\"]"))
-            .map(a => (<HTMLElement>a).innerHTML);
-        const lessonInfos = Array.from(
-            cell.querySelectorAll("a[href*=\"maps.google.com\"]"));
-        const rooms = lessonInfos
-            .map(a => (<HTMLElement>a).innerHTML.substr(0, (<HTMLElement>a).innerHTML.indexOf(' ')));
-        const lessonTypes = lessonInfos
-            .map(a => (<HTMLElement>a).innerHTML.substr((<HTMLElement>a).innerHTML.indexOf(' ') + 1));
-        const areOnlineLessons = lessonInfos
-            .map(a => (<HTMLElement>a).innerHTML.includes("on-line"));
+        const lessonNames = this.parseLessonNames(cell);
+        const teachers = this.parseTeachers(cell);
+        const lessonInfos = this.parseLessonInfos(cell);
 
         const lessons = [];
+        // create lessons from lesson infos
         for (let i = 0; i < lessonNames.length; i++) {
             const lesson = new Lesson();
             lesson.subjectName = lessonNames[i];
-            lesson.teacherName = i >= teachers.length ?
+            lesson.teacher = i >= teachers.length ?
                 teachers[teachers.length - 1] :
                 teachers[i];
-            lesson.room = i >= rooms.length ?
-                rooms[rooms.length - 1] :
-                rooms[i];
-            const lessonTypeString = i >= lessonTypes.length ?
-                lessonTypes[lessonTypes.length - 1] :
-                lessonTypes[i];
-            lesson.lessonType = this.parseLessonType(lessonTypeString);
-            lesson.isOnline = i >= areOnlineLessons.length ?
-                areOnlineLessons[areOnlineLessons.length - 1] :
-                areOnlineLessons[i];
+            const lessonInfo = i >= lessonInfos.length ?
+                lessonInfos[lessonInfos.length - 1] :
+                lessonInfos[i];
+            lesson.room = lessonInfo?.roomNumber ?? "";
+            lesson.lessonType = this.parseLessonType(lessonInfo?.lessonType);
+            lesson.isOnline = lessonInfo?.isOnline ?? false;
             lessons.push(lesson);
         }
 
@@ -98,15 +165,18 @@ export class ScheduleParser {
     }
 
     private parseLessonType(lessonTypeString: string | undefined): LessonType {
-        switch (lessonTypeString) {
-            case "Лек":
-                return LessonType.Lecture;
-            case "Прак":
-                return LessonType.Practicum;
-            case "Лаб":
-                return LessonType.Lab;
-            default:
-                return LessonType.Lecture;
+        if (lessonTypeString?.includes("Лек")) {
+            return LessonType.Lecture;
         }
+
+        if (lessonTypeString?.includes("Прак")) {
+            return LessonType.Lecture;
+        }
+
+        if (lessonTypeString?.includes("Лаб")) {
+            return LessonType.Lecture;
+        }
+
+        return LessonType.Lecture;
     }
 }

@@ -1,6 +1,8 @@
+import { Teacher } from "./teacher";
+
 export class Lesson {
     subjectName: string;
-    teacherName: string;
+    teacher: Teacher;
     room: string;
     lessonType: LessonType;
     isOnline: boolean;

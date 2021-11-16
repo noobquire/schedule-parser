@@ -170,11 +170,11 @@ export class ScheduleParser {
         }
 
         if (lessonTypeString?.includes("Прак")) {
-            return LessonType.Lecture;
+            return LessonType.Practicum;
         }
 
         if (lessonTypeString?.includes("Лаб")) {
-            return LessonType.Lecture;
+            return LessonType.Lab;
         }
 
         return LessonType.Lecture;

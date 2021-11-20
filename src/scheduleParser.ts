@@ -93,11 +93,12 @@ export class ScheduleParser {
             .map(a => (<HTMLLinkElement>a).href);
 
         const teachers: Teacher[] = [];
+        const scheduleLinkPrefix = "/Schedules/ViewSchedule.aspx?v=";
         for (let i = 0; i < shortNames.length; i++) {
             const teacher = new Teacher();
             teacher.shortName = shortNames[i];
             teacher.fullName = fullNames[i];
-            teacher.scheduleLink = "http://rozklad.kpi.ua" + links[i];
+            teacher.scheduleUuid = links[i].substr(scheduleLinkPrefix.length);
             teachers.push(teacher);
         }
         return teachers;

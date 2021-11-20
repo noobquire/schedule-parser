@@ -102,7 +102,7 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
             for (let i = 0; i < groups.length; i++) {
                 const group = groups[i];
                 console.log(`(${i + 1}/${groups.length}) Parsing schedule for group ${group.name}`);
-                const groupPageHtml = await axios.get<string>(group.scheduleUrl);
+                const groupPageHtml = await axios.get<string>(group.getScheduleUrl());
                 const groupDocument = new JSDOM(groupPageHtml.data).window.document;
                 const scheduleParser = new ScheduleParser(groupDocument);
                 const schedule = scheduleParser.parseSchedulePage();
@@ -128,7 +128,9 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
 
         const group = new Group(groupName);
         group.schedule = schedule;
-        group.scheduleUrl = pageResponse.request.res.responseUrl!;
+        const groupScheduleLinkPrefix = "http://rozklad.kpi.ua/Schedules/ViewSchedule.aspx?g=";
+        const responseLink: string = pageResponse.request.res.responseUrl!;
+        group.scheduleUuid = responseLink.substr(groupScheduleLinkPrefix.length);
 
         return [group];
 

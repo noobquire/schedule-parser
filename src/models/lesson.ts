@@ -2,6 +2,7 @@ import { Teacher } from "./teacher";
 
 export class Lesson {
     subjectName: string;
+    subjectFullName: string;
     teacher: Teacher;
     room: string;
     lessonType: LessonType;

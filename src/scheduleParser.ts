@@ -11,12 +11,24 @@ export class ScheduleParser {
         this.document = document;
     }
 
+    private isDaytimeSchedule(scheduleTable: HTMLTableElement): boolean {
+        // fulltime group schedule has 7 or 8 rows (6-7 pairs)
+        // and 7 columns (6 days and one column for pair time)
+        const rows = scheduleTable.rows.length;
+        const columns = scheduleTable.rows[0]?.cells.length ?? 0;
+        if(![7, 8].includes(rows) || columns != 7) {
+            console.warn(`Received unexpected schedule table size: ${rows} rows, ${columns} columns`);
+            return false;
+        }
+
+        return true;
+    }
+
     public parseSchedulePage(): Schedule {
         const schedule = new Schedule();
 
         const firstWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_FirstScheduleTable");
-        if (![7, 8].includes(firstWeekScheduleTable.rows.length)) {
-            console.debug(`Received unexpected schedule table size: ${firstWeekScheduleTable.rows.length}`);
+        if (!this.isDaytimeSchedule(firstWeekScheduleTable)) {
             return schedule;
         }
         const firstWeek = this.getLessonsFromTable(firstWeekScheduleTable!);
@@ -39,6 +51,7 @@ export class ScheduleParser {
     }
 
     private getLessonsFromTable(scheduleTable: HTMLTableElement): Lesson[][][] {
+        // delete first row with day names for convinience
         scheduleTable.deleteRow(0);
         const lessons: Lesson[][][] = [];
 
@@ -46,7 +59,7 @@ export class ScheduleParser {
             lessons.push([]);
             for (let j = 0; j < 6; j++) {
                 const scheduleCell = scheduleTable.rows[j].cells[i + 1];
-                const celllessons = this.getLessonsInCell(scheduleCell);
+                const celllessons = this.parseLessonsInCell(scheduleCell);
                 lessons[i].push([]);
                 lessons[i][j].push(...celllessons);
             }
@@ -59,6 +72,12 @@ export class ScheduleParser {
         return Array.from(cell
             .getElementsByClassName("disLabel")[0].children)
             .map(a => (<HTMLElement>a).innerHTML);
+    }
+
+    private parseLessonFullNames(cell: HTMLTableCellElement): string[] {
+        return Array.from(cell
+            .getElementsByClassName("disLabel")[0].children)
+            .map(a => (<HTMLLinkElement>a).title);
     }
 
     private parseTeachers(cell: HTMLTableCellElement): Teacher[] {
@@ -93,7 +112,7 @@ export class ScheduleParser {
         }
 
         const lessonInfos = lessonsInfoMatch![2]
-            .split(/(?!\d), (?!\d)/)
+            .split(/(?!\d), (?!\d)/) // room map coordinates can be two numbers separated by ', ', ignore that 
             .map(s => s.trim());
 
         for (const lessonInfoStr of lessonInfos) {
@@ -135,12 +154,13 @@ export class ScheduleParser {
         return info;
     }
 
-    private getLessonsInCell(cell: HTMLTableCellElement): Lesson[] {
+    private parseLessonsInCell(cell: HTMLTableCellElement): Lesson[] {
         if (cell?.getElementsByClassName("disLabel")[0] == undefined) {
             return [];
         }
 
         const lessonNames = this.parseLessonNames(cell);
+        const lessonFullNames = this.parseLessonFullNames(cell);
         const teachers = this.parseTeachers(cell);
         const lessonInfos = this.parseLessonInfos(cell);
 
@@ -149,6 +169,10 @@ export class ScheduleParser {
         for (let i = 0; i < lessonNames.length; i++) {
             const lesson = new Lesson();
             lesson.subjectName = lessonNames[i];
+            lesson.subjectFullName = lessonFullNames[i];
+            // TODO: these conditions are a crutch for cases when amount
+            // of lesson names, teachers and lesson infos does not match
+            // in future, look at teacher's schedule for correct lesson infos
             lesson.teacher = i >= teachers.length ?
                 teachers[teachers.length - 1] :
                 teachers[i];

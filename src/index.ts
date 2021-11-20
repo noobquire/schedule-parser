@@ -7,7 +7,7 @@ import { GroupSelectionParser } from './groupSelectionParser';
 import { Group } from './models/group';
 
 const getScheduleUrl = "http://rozklad.kpi.ua/Schedules/ScheduleGroupSelection.aspx";
-const ukrainianAlphabet = "абвгдеєжзиіїйклмнопрстуфхцчшщюя";
+const ukrainianAlphabet = "абвгдеєжзиіїйклмнопрстуфхцчшщюя"; //"і";
 let validationToken: string;
 
 (async () => {
@@ -26,19 +26,14 @@ let validationToken: string;
         }
     }
 
-    Date.prototype.toJSON = function () {
-        const hoursDiff = this.getHours() - this.getTimezoneOffset() / 60;
-        this.setHours(hoursDiff);
-        return this.toISOString();
-    };
-    const groupsLengthBeforeFiltering: number = groups.length;
+    const emptyGroupNames = groups.filter(g => g.schedule.isEmpty()).map(g => g.name);
     groups = groups.filter(g => !g.schedule.isEmpty());
-    const groupsLengthAfterFiltering: number = groups.length;
-    const removedGroupsCount: number = groupsLengthBeforeFiltering - groupsLengthAfterFiltering;
-    console.log(`Filtered ${removedGroupsCount} empty schedules`);
+    console.log(`Filtered ${emptyGroupNames.length} empty schedules`);
     const jsonSchedulesData = JSON.stringify(groups);
-    writeFileSync("output.json", jsonSchedulesData);
-    console.log(`Wrote ${groupsLengthAfterFiltering} schedules to output.json`);
+    writeFileSync("schedules.json", jsonSchedulesData);
+    console.log(`Wrote ${groups.length} schedules to schedules.json`);
+    writeFileSync("empty-groups.json", JSON.stringify(emptyGroupNames));
+    console.log(`Wrote names of groups with empty schedules to empty-groups.json`);
     console.timeEnd("parsing rozklad.kpi.ua");
 })();
 
@@ -86,32 +81,43 @@ async function getGroupScheduleResponse(groupName: string): Promise<AxiosRespons
 async function getGroupSchedule(groupName: string): Promise<Group[]> {
     try {
         const pageResponse = await getGroupScheduleResponse(groupName);
-        if(pageResponse.status == 404) {
+        if (pageResponse.status == 404) {
 
             return [];
         }
-        
+
         const document = new JSDOM(pageResponse.data).window.document;
         const groupSelectionParser = new GroupSelectionParser(document);
 
         if (groupSelectionParser.isGroupSelectionPage()) {
-            const groups = groupSelectionParser.parseGroupsList();
+            let groups = groupSelectionParser.parseGroupsList();
 
-            if(groups.length == 0) {
+            if (groups.length == 0) {
                 console.warn(`Could not resolve group ${groupName}, skipping`);
                 return groups;
             }
 
             console.warn(`Resolved ${groups.length} conflicting group names: ${groups.map(g => g.name).join(', ')}`)
-            
+
             for (let i = 0; i < groups.length; i++) {
                 const group = groups[i];
-                console.log(`(${i+1}/${groups.length}) Parsing schedule for group ${group.name}`);
+                console.log(`(${i + 1}/${groups.length}) Parsing schedule for group ${group.name}`);
                 const groupPageHtml = await axios.get<string>(group.scheduleUrl);
                 const groupDocument = new JSDOM(groupPageHtml.data).window.document;
                 const scheduleParser = new ScheduleParser(groupDocument);
                 const schedule = scheduleParser.parseSchedulePage();
                 group.schedule = schedule;
+            }
+
+            const nonEmptyGroups = groups.filter(g => !g.schedule.isEmpty());
+            if (nonEmptyGroups.length == 1) { // if conflicting groups have duplicates
+                console.log(`Conflicting group names were duplicates, using non-empty schedule with default name`);
+                nonEmptyGroups[0].name = groupName; // use default group name without cathedra
+                groups = nonEmptyGroups;
+            } else if (nonEmptyGroups.length == 0) {
+                console.log(`Conflicting group schedules were empty, using default name`);
+                groups[0].name = groupName; // use only one default group name
+                groups = [groups[0]];
             }
 
             return groups;

@@ -21,10 +21,11 @@ export class GroupSelectionParser {
 
     public parseGroupsList(): Group[] {
         const groupLinks = <NodeList>this.document.getElementById("ctl00_MainContent_ctl00_GroupListPanel")?.querySelectorAll("a");
+        const scheduleLinkPrefix = "/Schedules/ViewSchedule.aspx?g=";
         const groups: Group[] = Array.from(groupLinks).map(groupElement => {
             const groupLink = <HTMLLinkElement>groupElement;
             const group = new Group(groupLink.innerHTML);
-            group.scheduleUrl = "http://rozklad.kpi.ua/Schedules/" + groupLink.href;
+            group.scheduleUuid = groupLink.href.substr(scheduleLinkPrefix.length);
             return group;
         });
 

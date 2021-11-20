@@ -2,7 +2,7 @@ import { Teacher } from "./teacher";
 
 export class Lesson {
     subjectName: string;
-    subjectFullName: string;
+    subjectFullName: string | undefined;
     teacher: Teacher;
     room: string;
     lessonType: LessonType;

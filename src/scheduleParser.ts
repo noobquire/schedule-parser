@@ -12,11 +12,12 @@ export class ScheduleParser {
     }
 
     private isDaytimeSchedule(scheduleTable: HTMLTableElement): boolean {
-        // fulltime group schedule has 7 or 8 rows (6-7 pairs)
-        // and 7 columns (6 days and one column for pair time)
+        // fulltime group schedule must have
+        // 7 or 8 rows (6-7 pairs and one row for day names)
+        // 7 columns (6 days and one column for pair time)
         const rows = scheduleTable.rows.length;
         const columns = scheduleTable.rows[0]?.cells.length ?? 0;
-        if(![7, 8].includes(rows) || columns != 7) {
+        if (![7, 8].includes(rows) || columns != 7) {
             console.warn(`Received unexpected schedule table size: ${rows} rows, ${columns} columns`);
             return false;
         }
@@ -27,15 +28,17 @@ export class ScheduleParser {
     public parseSchedulePage(): Schedule {
         const schedule = new Schedule();
 
-        const firstWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_FirstScheduleTable");
+        const firstWeekScheduleTable = <HTMLTableElement>this.document
+            .getElementById("ctl00_MainContent_FirstScheduleTable");
         if (!this.isDaytimeSchedule(firstWeekScheduleTable)) {
             return schedule;
         }
-        const firstWeek = this.getLessonsFromTable(firstWeekScheduleTable!);
-        const secondWeekScheduleTable = <HTMLTableElement>this.document.getElementById("ctl00_MainContent_SecondScheduleTable");
-        const secondWeek = this.getLessonsFromTable(secondWeekScheduleTable!);
+        const firstWeek = this.parseLessonsFromTable(firstWeekScheduleTable!);
+        const secondWeekScheduleTable = <HTMLTableElement>this.document
+            .getElementById("ctl00_MainContent_SecondScheduleTable");
+        const secondWeek = this.parseLessonsFromTable(secondWeekScheduleTable!);
 
-        // fill schedule from array
+        // fill schedule from array of lessons
         for (let i = 0; i < 6; i++) {
             const firstDay = schedule.firstWeek[i];
             const secondDay = schedule.secondWeek[i];
@@ -50,15 +53,13 @@ export class ScheduleParser {
         return schedule;
     }
 
-    private getLessonsFromTable(scheduleTable: HTMLTableElement): Lesson[][][] {
-        // delete first row with day names for convinience
-        scheduleTable.deleteRow(0);
+    private parseLessonsFromTable(scheduleTable: HTMLTableElement): Lesson[][][] {
         const lessons: Lesson[][][] = [];
 
         for (let i = 0; i < 6; i++) {
             lessons.push([]);
             for (let j = 0; j < 6; j++) {
-                const scheduleCell = scheduleTable.rows[j].cells[i + 1];
+                const scheduleCell = scheduleTable.rows[j + 1].cells[i + 1];
                 const celllessons = this.parseLessonsInCell(scheduleCell);
                 lessons[i].push([]);
                 lessons[i][j].push(...celllessons);
@@ -155,6 +156,7 @@ export class ScheduleParser {
     }
 
     private parseLessonsInCell(cell: HTMLTableCellElement): Lesson[] {
+        // if no lesson names, this cell is empty
         if (cell?.getElementsByClassName("disLabel")[0] == undefined) {
             return [];
         }
@@ -168,11 +170,14 @@ export class ScheduleParser {
         // create lessons from lesson infos
         for (let i = 0; i < lessonNames.length; i++) {
             const lesson = new Lesson();
-            lesson.subjectName = lessonNames[i];
-            lesson.subjectFullName = lessonFullNames[i];
-            // TODO: these conditions are a crutch for cases when amount
+            const lessonName = lessonNames[i];
+            const lessonFullName = lessonFullNames[i];
+            lesson.subjectName = lessonName;
+            lesson.subjectFullName = lessonName == lessonFullName ? undefined : lessonFullName;
+            // these conditions are a crutch for cases when amount
             // of lesson names, teachers and lesson infos does not match
-            // in future, look at teacher's schedule for correct lesson infos
+            // TODO: in future, look at teacher's schedule for correct lesson infos
+            // p.s. in some rare cases there can be no teachers or lesson infos, ex. 'АМ-01'
             lesson.teacher = i >= teachers.length ?
                 teachers[teachers.length - 1] :
                 teachers[i];

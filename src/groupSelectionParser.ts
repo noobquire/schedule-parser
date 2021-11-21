@@ -1,4 +1,5 @@
 import { Group } from "./models/group";
+import { Schedule } from "./models/schedule";
 
 export class GroupSelectionParser {
     private document: Document;
@@ -25,7 +26,8 @@ export class GroupSelectionParser {
         const groups: Group[] = Array.from(groupLinks).map(groupElement => {
             const groupLink = <HTMLLinkElement>groupElement;
             const group = new Group(groupLink.innerHTML);
-            group.scheduleUuid = groupLink.href.substr(scheduleLinkPrefix.length);
+            group.schedule = new Schedule()
+            group.schedule.uuid = groupLink.href.substr(scheduleLinkPrefix.length);
             return group;
         });
 

@@ -5,9 +5,10 @@ import { writeFileSync } from 'fs';
 import { JSDOM } from 'jsdom';
 import { GroupSelectionParser } from './groupSelectionParser';
 import { Group } from './models/group';
+import { insertSchedulesDatabase } from './schedulesDb';
 
 const getScheduleUrl = "http://rozklad.kpi.ua/Schedules/ScheduleGroupSelection.aspx";
-const ukrainianAlphabet = "абвгдеєжзиіїйклмнопрстуфхцчшщюя"; //"і";
+const ukrainianAlphabet = "абвгдеєжзиіїйклмнопрстуфхцчшщюя"; // "і"; 
 let validationToken: string;
 
 (async () => {
@@ -35,6 +36,10 @@ let validationToken: string;
     writeFileSync("empty-groups.json", JSON.stringify(emptyGroupNames));
     console.log(`Wrote names of groups with empty schedules to empty-groups.json`);
     console.timeEnd("parsing rozklad.kpi.ua");
+
+    console.time("inserting to schedules db");
+    await insertSchedulesDatabase(groups);
+    console.timeEnd("inserting to schedules db");
 })();
 
 async function getGroupsList(firstLetter: string): Promise<string[]> {
@@ -61,7 +66,6 @@ async function getValidationToken(): Promise<string> {
 
 async function getGroupScheduleResponse(groupName: string): Promise<AxiosResponse<string>> {
     const query = new URLSearchParams();
-    query.append("__EVENTARGUMENT", "");
     query.append("__EVENTTARGET", "");
     query.append("__EVENTVALIDATION", validationToken);
     query.append("ctl00$MainContent$ctl00$btnShowSchedule", "Розклад занять");
@@ -106,13 +110,15 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
                 const groupDocument = new JSDOM(groupPageHtml.data).window.document;
                 const scheduleParser = new ScheduleParser(groupDocument);
                 const schedule = scheduleParser.parseSchedulePage();
+                const scheduleUuid = group.schedule.uuid;
+                schedule.uuid = scheduleUuid;
                 group.schedule = schedule;
             }
 
             const nonEmptyGroups = groups.filter(g => !g.schedule.isEmpty());
             if (nonEmptyGroups.length == 1) { // if conflicting groups have duplicates
                 console.log(`Conflicting group names were duplicates, using non-empty schedule with default name`);
-                nonEmptyGroups[0].name = groupName; // use default group name without cathedra
+                nonEmptyGroups[0].name = groupName; // use default group name without cathedra in brackets
                 groups = nonEmptyGroups;
             } else if (nonEmptyGroups.length == 0) {
                 console.log(`Conflicting group schedules were empty, using default name`);
@@ -130,7 +136,7 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
         group.schedule = schedule;
         const groupScheduleLinkPrefix = "http://rozklad.kpi.ua/Schedules/ViewSchedule.aspx?g=";
         const responseLink: string = pageResponse.request.res.responseUrl!;
-        group.scheduleUuid = responseLink.substr(groupScheduleLinkPrefix.length);
+        group.schedule.uuid = responseLink.substr(groupScheduleLinkPrefix.length);
 
         return [group];
 

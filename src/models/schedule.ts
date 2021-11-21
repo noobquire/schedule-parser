@@ -3,6 +3,7 @@ import { Day, Days } from "./day";
 export class Schedule {
     firstWeek: Day[];
     secondWeek: Day[];
+    uuid: string;
 
     constructor() {
         this.firstWeek = this.createWeek();
@@ -10,30 +11,26 @@ export class Schedule {
     }
 
     public isEmpty(): boolean {
-        let firstWeekEmpty: boolean = true;
-        let secondWeekEmpty: boolean = true;
-
-        daysLoop:
-        for(let i = 0; i < 6; i++) {
-            for(let j = 0; j < 6; j++) {
-                if(this.firstWeek[i].pairs[j].lessons?.length ?? 0 > 0) {
-                    firstWeekEmpty = false;
-                    break daysLoop;
-                }
-            }
-        }
-
-        daysLoop:
-        for(let i = 0; i < 6; i++) {
-            for(let j = 0; j < 6; j++) {
-                if(this.secondWeek[i].pairs[j].lessons?.length ?? 0 > 0) {
-                    secondWeekEmpty = false;
-                    break daysLoop;
-                }
-            }
-        }
+        let firstWeekEmpty: boolean = this.weekIsEmpty(this.firstWeek);
+        let secondWeekEmpty: boolean = this.weekIsEmpty(this.secondWeek);
 
         return firstWeekEmpty && secondWeekEmpty;
+    }
+
+    private weekIsEmpty(week: Day[]): boolean {
+        let weekEmpty = true;
+
+        daysLoop:
+        for(let i = 0; i < 6; i++) {
+            for(let j = 0; j < 6; j++) {
+                if(week[i].pairs[j].lessons?.length ?? 0 > 0) {
+                    weekEmpty = false;
+                    break daysLoop;
+                }
+            }
+        }
+
+        return weekEmpty;
     }
 
     private createWeek(): Day[] {

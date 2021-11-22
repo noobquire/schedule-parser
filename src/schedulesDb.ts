@@ -50,8 +50,21 @@ async function getGroupUuid(client: Client, groupName: string): Promise<string> 
     return group.rows[0][0]!.toString();
 }
 
+async function isUniqueScheduleUuid(client: Client, scheduleUuid: string): Promise<boolean> {
+    const existingGroupQuery = new Query(
+        "SELECT id FROM group_schedules WHERE rozklad_uuid = $1",
+        [scheduleUuid]
+    );
+    const group = await client.execute(existingGroupQuery);
+    return group.rows.length == 0;
+}
+
 async function insertSchedules(client: Client, groups: Group[]): Promise<void> {
     for (const group of groups) {
+        if(!await isUniqueScheduleUuid(client, group.schedule.uuid)) {
+            console.log(`Schedule for group ${group.name} did not change, skipping`);
+            continue;
+        }
         const scheduleId = await insertSchedule(client, group);
         for (const day of group.schedule.firstWeek) {
             const dayName = day.dayName;

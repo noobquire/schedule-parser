@@ -20,7 +20,7 @@ let validationToken: string;
         const firstLetter = ukrainianAlphabet[i];
         const groupNames = await getGroupsList(firstLetter);
 
-        for (const groupName of groupNames) {
+        for (const groupName of groupNames.filter(distinctCaseInsensitive)) {
             console.log(`Parsing schedule for group ${groupName}`);
             const parsedGroups = await getGroupSchedule(groupName);
             groups.push(...parsedGroups!);
@@ -41,6 +41,10 @@ let validationToken: string;
     await insertSchedulesDatabase(groups);
     console.timeEnd("inserting to schedules db");
 })();
+
+function distinctCaseInsensitive(value: string, index: number, self: string[]) {
+    return self.map(s => s.toLowerCase()).indexOf(value.toLowerCase()) === index;
+}
 
 async function getGroupsList(firstLetter: string): Promise<string[]> {
     const groupsUrl = getScheduleUrl + "/GetGroups";
@@ -82,6 +86,18 @@ async function getGroupScheduleResponse(groupName: string): Promise<AxiosRespons
     return response;
 }
 
+function containsDuplicateNames(groups: Group[]): boolean {
+    const valuesSoFar: string[] = [];
+    for (let i = 0; i < groups.length; ++i) {
+        const value: string = groups[i].name;
+        if (valuesSoFar.indexOf(value) !== -1) {
+            return true;
+        }
+        valuesSoFar.push(value);
+    }
+    return false;
+}
+
 async function getGroupSchedule(groupName: string): Promise<Group[]> {
     try {
         const pageResponse = await getGroupScheduleResponse(groupName);
@@ -117,16 +133,23 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
 
             const nonEmptyGroups = groups.filter(g => !g.schedule.isEmpty());
             if (nonEmptyGroups.length == 1) { // if conflicting groups have duplicates
-                console.log(`Conflicting group names were duplicates, using non-empty schedule with default name`);
+                console.log('Conflicting group names were duplicates, using non-empty schedule with default name');
                 nonEmptyGroups[0].name = groupName; // use default group name without cathedra in brackets
-                groups = nonEmptyGroups;
+                return nonEmptyGroups;
             } else if (nonEmptyGroups.length == 0) {
-                console.log(`Conflicting group schedules were empty, using default name`);
+                console.log('Conflicting group schedules were empty, using default name');
                 groups[0].name = groupName; // use only one default group name
-                groups = [groups[0]];
+                return [groups[0]];
+            } else if (containsDuplicateNames(nonEmptyGroups)) {
+                console.log('Conflicting group schedules had duplicate names, adding indexes to them');
+                for (let i = 0; i < nonEmptyGroups.length; i++) {
+                    const group = nonEmptyGroups[i];
+                    group.name += ` #${i + 1}`;
+                }
+                return nonEmptyGroups;
+            } else {
+                return nonEmptyGroups;
             }
-
-            return groups;
         }
 
         const scheduleParser = new ScheduleParser(document);

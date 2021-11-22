@@ -177,8 +177,11 @@ export class ScheduleParser {
             lesson.subjectFullName = lessonName == lessonFullName ? undefined : lessonFullName;
             // these conditions are a crutch for cases when amount
             // of lesson names, teachers and lesson infos does not match
-            // TODO: in future, look at teacher's schedule for correct lesson infos
             // p.s. in some rare cases there can be no teachers or lesson infos, ex. 'АМ-01'
+            if(i >= teachers.length || i >= lessonInfos.length) {
+                console.warn(`Non-matching amount of lessons and teachers or infos`);
+                // TODO: look at teacher's schedule for correct lesson infos
+            }
             lesson.teacher = i >= teachers.length ?
                 teachers[teachers.length - 1] :
                 teachers[i];

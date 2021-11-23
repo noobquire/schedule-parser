@@ -1,24 +1,24 @@
-import axios, { AxiosResponse } from 'axios';
-import { GroupsResponse } from './models/groupsResponse';
 import { ScheduleParser } from './scheduleParser';
 import { writeFileSync } from 'fs';
 import { JSDOM } from 'jsdom';
 import { GroupSelectionParser } from './groupSelectionParser';
 import { Group } from './models/group';
 import { insertSchedulesDatabase } from './schedulesDb';
+import { RozkladClient } from './rozkladClient';
 
-const getScheduleUrl = "http://rozklad.kpi.ua/Schedules/ScheduleGroupSelection.aspx";
 const ukrainianAlphabet = "абвгдеєжзиіїйклмнопрстуфхцчшщюя"; // "і"; 
 let validationToken: string;
+let rozkladClient: RozkladClient;
 
 (async () => {
     console.time("parsing rozklad.kpi.ua");
+    rozkladClient = new RozkladClient();
     validationToken = await getValidationToken();
     let groups: Group[] = [];
 
     for (let i = 0; i < ukrainianAlphabet.length; i++) {
         const firstLetter = ukrainianAlphabet[i];
-        const groupNames = await getGroupsList(firstLetter);
+        const groupNames = await rozkladClient.getGroupsList(firstLetter);
 
         for (const groupName of groupNames.filter(distinctCaseInsensitive)) {
             console.log(`Parsing schedule for group ${groupName}`);
@@ -46,44 +46,13 @@ function distinctCaseInsensitive(value: string, index: number, self: string[]) {
     return self.map(s => s.toLowerCase()).indexOf(value.toLowerCase()) === index;
 }
 
-async function getGroupsList(firstLetter: string): Promise<string[]> {
-    const groupsUrl = getScheduleUrl + "/GetGroups";
-    const response = await axios.post(groupsUrl, {
-        prefixText: firstLetter
-    });
-
-    const groups = (<GroupsResponse><unknown>response.data).d ?? [];
-
-    return groups;
-    //const groupRegex = /І[А-Я]-\d\d(?!ф)(мп|мн)?/; // daytime bachelor and master groups of FICT
-    //return groups.filter(g => groupRegex.test(g));
-}
-
 async function getValidationToken(): Promise<string> {
-    const responseHtml = await axios.get<string>(getScheduleUrl);
-    const document = new JSDOM(responseHtml.data).window.document;
+    const groupSelectionHtml = await rozkladClient.getGroupScheduleSelectionPage();
+    const document = new JSDOM(groupSelectionHtml).window.document;
 
     const parser = new GroupSelectionParser(document);
 
     return parser.getValidationToken();
-}
-
-async function getGroupScheduleResponse(groupName: string): Promise<AxiosResponse<string>> {
-    const query = new URLSearchParams();
-    query.append("__EVENTTARGET", "");
-    query.append("__EVENTVALIDATION", validationToken);
-    query.append("ctl00$MainContent$ctl00$btnShowSchedule", "Розклад занять");
-    query.append("ctl00$MainContent$ctl00$txtboxGroup", groupName);
-    const queryString = query.toString();
-
-    const config = {
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-    };
-
-    const response = await axios.post(getScheduleUrl, queryString, config);
-    return response;
 }
 
 function containsDuplicateNames(groups: Group[]): boolean {
@@ -100,13 +69,13 @@ function containsDuplicateNames(groups: Group[]): boolean {
 
 async function getGroupSchedule(groupName: string): Promise<Group[]> {
     try {
-        const pageResponse = await getGroupScheduleResponse(groupName);
-        if (pageResponse.status == 404) {
+        const groupScheduleResponse = await rozkladClient.getGroupScheduleByName(groupName, validationToken);
 
+        if (groupScheduleResponse.status == 404) {
             return [];
         }
 
-        const document = new JSDOM(pageResponse.data).window.document;
+        const document = new JSDOM(groupScheduleResponse.data).window.document;
         const groupSelectionParser = new GroupSelectionParser(document);
 
         if (groupSelectionParser.isGroupSelectionPage()) {
@@ -122,8 +91,8 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
             for (let i = 0; i < groups.length; i++) {
                 const group = groups[i];
                 console.log(`(${i + 1}/${groups.length}) Parsing schedule for group ${group.name}`);
-                const groupPageHtml = await axios.get<string>(group.getScheduleUrl());
-                const groupDocument = new JSDOM(groupPageHtml.data).window.document;
+                const groupPageHtml = await rozkladClient.getGroupScheduleByUuid(group.schedule.uuid);
+                const groupDocument = new JSDOM(groupPageHtml).window.document;
                 const scheduleParser = new ScheduleParser(groupDocument);
                 const schedule = scheduleParser.parseSchedulePage();
                 const scheduleUuid = group.schedule.uuid;
@@ -158,7 +127,7 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
         const group = new Group(groupName);
         group.schedule = schedule;
         const groupScheduleLinkPrefix = "http://rozklad.kpi.ua/Schedules/ViewSchedule.aspx?g=";
-        const responseLink: string = pageResponse.request.res.responseUrl!;
+        const responseLink: string = groupScheduleResponse.request.res.responseUrl!;
         group.schedule.uuid = responseLink.substr(groupScheduleLinkPrefix.length);
 
         return [group];

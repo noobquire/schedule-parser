@@ -8,10 +8,16 @@ export class GroupSelectionParser {
         this.document = document;
     }
 
+    public isGroupNotFoundPage(): boolean {
+        const error = document.getElementById("ctl00_MainContent_ctl00_lblError");
+
+        return error?.innerHTML == 'Групи з такою назвою не знайдено!';
+    }
+
     public isGroupSelectionPage(): boolean {
         const groupsList = this.document.getElementById("ctl00_MainContent_ctl00_GroupListPanel");
 
-        return groupsList !== null;
+        return !this.isGroupNotFoundPage() && groupsList !== null;
     }
 
     public getValidationToken(): string {

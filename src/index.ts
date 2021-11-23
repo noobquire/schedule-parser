@@ -3,7 +3,7 @@ import { writeFileSync } from 'fs';
 import { JSDOM } from 'jsdom';
 import { GroupSelectionParser } from './groupSelectionParser';
 import { Group } from './models/group';
-import { insertSchedulesDatabase } from './schedulesDb';
+import { SchedulesDbClient } from './schedulesDb';
 import { RozkladClient } from './rozkladClient';
 
 const ukrainianAlphabet = "абвгдеєжзиіїйклмнопрстуфхцчшщюя"; // "і"; 
@@ -38,7 +38,8 @@ let rozkladClient: RozkladClient;
     console.timeEnd("parsing rozklad.kpi.ua");
 
     console.time("inserting to schedules db");
-    await insertSchedulesDatabase(groups);
+    const client = new SchedulesDbClient();
+    await client.insertSchedulesDatabase(groups);
     console.timeEnd("inserting to schedules db");
 })();
 
@@ -78,9 +79,11 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
         const document = new JSDOM(groupScheduleResponse.data).window.document;
         const groupSelectionParser = new GroupSelectionParser(document);
 
+        // if there are several groups with same name, we get group selection page
         if (groupSelectionParser.isGroupSelectionPage()) {
             let groups = groupSelectionParser.parseGroupsList();
 
+            // sometimes group is in groups list, but has no schedule
             if (groups.length == 0) {
                 console.warn(`Could not resolve group ${groupName}, skipping`);
                 return groups;
@@ -100,18 +103,25 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
                 group.schedule = schedule;
             }
 
+            // due to inconsistent group naming, handle some rare cases:
             const nonEmptyGroups = groups.filter(g => !g.schedule.isEmpty());
-            if (nonEmptyGroups.length == 1) { // if conflicting groups have duplicates
+            // if only one group has non-empty schedule
+            if (nonEmptyGroups.length == 1) {
                 console.log('Conflicting group names were duplicates, using non-empty schedule with default name');
-                nonEmptyGroups[0].name = groupName; // use default group name without cathedra in brackets
+                // use default group name without cathedra in brackets
+                nonEmptyGroups[0].name = groupName;
                 return nonEmptyGroups;
-            } else if (nonEmptyGroups.length == 0) {
+            } // if all confliting groups have empty schedules
+            else if (nonEmptyGroups.length == 0) {
                 console.log('Conflicting group schedules were empty, using default name');
-                groups[0].name = groupName; // use only one default group name
+                // use only one default group name for empty groups list
+                groups[0].name = groupName; 
                 return [groups[0]];
-            } else if (containsDuplicateNames(nonEmptyGroups)) {
+            } // if several conflicting groups with same name have non-empty schedules
+            else if (containsDuplicateNames(nonEmptyGroups)) { 
                 console.log('Conflicting group schedules had duplicate names, adding indexes to them');
-                for (let i = 0; i < nonEmptyGroups.length; i++) {
+                // concat indexes to their names to distinct them
+                for (let i = 0; i < nonEmptyGroups.length; i++) { 
                     const group = nonEmptyGroups[i];
                     group.name += ` #${i + 1}`;
                 }

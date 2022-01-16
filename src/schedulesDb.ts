@@ -78,7 +78,8 @@ export class SchedulesDbClient {
                 for (const pair of day.pairs) {
                     const pairNumber = pair.pairNumber;
                     for (const lesson of pair.lessons) {
-                        const teacherId = lesson.teacher == null ? null : await this.createTeacherIfNotExists(lesson.teacher);
+                        // TODO: support multiple teachers
+                        const teacherId = lesson.teachers[0] == null ? null : await this.createTeacherIfNotExists(lesson.teachers[0]);
                         const id = uuidv4();
                         const insertLessonQuery = new Query(
                             "INSERT INTO lessons(id, subject_name, subject_full_name, teacher_id, day, pair_number, type, schedule_id, is_online, room)" +

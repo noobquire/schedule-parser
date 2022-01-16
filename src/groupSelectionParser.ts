@@ -9,7 +9,7 @@ export class GroupSelectionParser {
     }
 
     public isGroupNotFoundPage(): boolean {
-        const error = document.getElementById("ctl00_MainContent_ctl00_lblError");
+        const error = this.document.getElementById("ctl00_MainContent_ctl00_lblError");
 
         return error?.innerHTML == 'Групи з такою назвою не знайдено!';
     }

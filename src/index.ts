@@ -6,7 +6,7 @@ import { Group } from './models/group';
 import { SchedulesDbClient } from './schedulesDb';
 import { RozkladClient } from './rozkladClient';
 
-const ukrainianAlphabet = "абвгдеєжзиіїйклмнопрстуфхцчшщюя"; // "і"; 
+const ukrainianAlphabet = "і"; //"абвгдеєжзиіїйклмнопрстуфхцчшщюя"; //  
 let validationToken: string;
 let rozkladClient: RozkladClient;
 
@@ -22,7 +22,7 @@ let rozkladClient: RozkladClient;
 
         // in very rare cases (ФФ-02ф) group name can appear several times 
         // with different case of letters (ФФ-02ф, ФФ-02Ф) and point to the same schedule page
-        // so we just filter case-insensitive duplicates
+        // so we just filter out case-insensitive duplicates
         const groupNamesWithoutDuplicates = groupNames.filter(distinctCaseInsensitive);
 
         for (const groupName of groupNamesWithoutDuplicates) {
@@ -84,7 +84,7 @@ async function getConflictingNamesGroupSchedules(groupName: string, groupSelecti
         const groupPageHtml = await rozkladClient.getGroupScheduleByUuid(group.schedule.uuid);
         const groupDocument = new JSDOM(groupPageHtml).window.document;
         const scheduleParser = new ScheduleParser(groupDocument);
-        const schedule = scheduleParser.parseSchedulePage();
+        const schedule = await scheduleParser.parseSchedulePage();
         const scheduleUuid = group.schedule.uuid;
         schedule.uuid = scheduleUuid;
         group.schedule = schedule;
@@ -145,7 +145,7 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
         }
 
         const scheduleParser = new ScheduleParser(document);
-        const schedule = scheduleParser.parseSchedulePage();
+        const schedule = await scheduleParser.parseSchedulePage();
 
         const group = new Group(groupName);
         group.schedule = schedule;

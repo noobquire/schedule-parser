@@ -1,6 +1,10 @@
 import { Lesson } from "./lesson"
 
-export class Pair {
+/**
+ * A pair in group's schedule. 
+ * Can have several lessons with different teachers in it.
+ */
+export class GroupPair {
     pairNumber: number
     pairStart: string
     pairEnd: string

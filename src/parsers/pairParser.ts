@@ -1,18 +1,26 @@
 import { JSDOM } from "jsdom";
 import { Lesson, parseLessonType } from "../models/lesson";
 import { LessonInfo } from "../models/lessonInfo";
-import { Pair } from "../models/pair";
+import { GroupPair } from "../models/groupPair";
 import { PairIdentifier } from "../models/pairIdentifier";
 import { Teacher } from "../models/teacher";
 import { TeacherScheduleParser } from "../teacherScheduleParser";
 import { Parser } from "./parser";
+import { TeacherPair } from "../models/teacherPair";
 
 /**
 * Used to get all lessons from single schedule table pair cell
-*/ 
-export class PairParser implements Parser<Pair> {
+*/
+export class PairParser implements Parser<GroupPair> {
     private cell: HTMLTableCellElement;
     private pairId: PairIdentifier;
+    private lessonNames: string[];
+    private lessonFullNames: string[];
+    /**
+     * Some lessons may have several teachers
+     */
+    private teachers: Teacher[][];
+    private lessonInfos: LessonInfo[];
 
     /**
      * Init new instance from schedule table cell
@@ -22,10 +30,10 @@ export class PairParser implements Parser<Pair> {
         this.pairId = pairId;
     }
 
-    async parse(): Promise<Pair> {
+    async parse(): Promise<GroupPair> {
         const lessons = await this.parseLessonsInCell(this.cell);
         const pairNumber = this.pairId.pairIndex + 1;
-        const pair = new Pair(pairNumber, lessons);
+        const pair = new GroupPair(pairNumber, lessons);
         return pair;
     }
 
@@ -35,68 +43,144 @@ export class PairParser implements Parser<Pair> {
             return [];
         }
 
-        const lessonNames = this.parseLessonNames(cell);
-        const lessonFullNames = this.parseLessonFullNames(cell);
-        const teachers = this.parseTeachers(cell);
-        let lessonInfos = this.parseLessonInfos(cell);
+        this.lessonNames = this.parseLessonNames(cell);
+        this.lessonFullNames = this.parseLessonFullNames(cell);
+        this.teachers = this.parseTeachers(cell);
+        this.lessonInfos = this.parseLessonInfos(cell);
 
-        // these conditions are a crutch for cases when amount
-        // of lesson names, teachers and lesson infos does not match
-        // p.s. in some rare cases there can be no teachers or lesson infos, ex. 'АМ-01'
-        const severalTeachersPerLesson = lessonNames.length > teachers.length;
-        
-        const lessInfosThanTeachers = lessonNames.length == teachers.length && lessonInfos.length < lessonNames.length && lessonNames.length > 0;
-        if (lessInfosThanTeachers) {
-            console.debug(`handling less infos than teachers: ${lessonNames.length} lessons, ${teachers.length} teachers, ${lessonInfos.length} infos in ${this.pairId}`);
-            const teacherLessonInfos = await Promise.all(teachers.map(async t => {
-                const teacherScheduleParser = new TeacherScheduleParser(t.scheduleUuid);
-                await teacherScheduleParser.init();
-                const info = new LessonInfo();
-                const teacherPair = teacherScheduleParser.parsePair(this.pairId);
-                info.isOnline = teacherPair.isOnline;
-                info.lessonType = teacherPair.lessonType;
-                info.roomNumber = teacherPair.room;
-                return info;
-            })).then();
-            lessonInfos = teacherLessonInfos;
-        } else if(severalTeachersPerLesson) {
-            console.debug(`handling several teachers per lesson: ${lessonNames.length} lessons, ${teachers.length} teachers, ${lessonInfos.length} infos in ${this.pairId}`)
-            if(lessonNames.length == 1) {
-                
-            }
-        }
-        else if (lessonNames.length != teachers.length || lessonNames.length != lessonInfos.length) {
-            console.warn(`${lessonNames.length} lessons, ${teachers.length} teachers, ${lessonInfos.length} infos in ${this.pairId}`);
-            // TODO: think how we can fix this
-        }
+        await this.fixLessonData();
 
         const lessons = [];
         // create lessons from lesson infos
-        for (let i = 0; i < lessonNames.length; i++) {
+        for (let i = 0; i < this.lessonNames.length; i++) {
             const lesson = new Lesson();
-            const lessonName = lessonNames[i];
-            const lessonFullName = lessonFullNames[i];
+            const lessonName = this.lessonNames[i];
+            const lessonFullName = this.lessonFullNames[i];
             lesson.subjectName = lessonName;
             lesson.subjectFullName = lessonName == lessonFullName ? undefined : lessonFullName;
+            lesson.teachers = this.teachers[i] ?? [];
 
-            if (lessonNames.length == 1 && teachers.length > 1) {
-                lesson.teachers = teachers;
-            } else if(i >= teachers.length) {
-                lesson.teachers = [teachers[teachers.length - 1]];
-            } else {
-                lesson.teachers = [teachers[i]];
-            }
-
-            const lessonInfo = i >= lessonInfos.length ?
-                lessonInfos[lessonInfos.length - 1] :
-                lessonInfos[i];
-            lesson.room = lessonInfo?.roomNumber ?? "";
+            const lessonInfo = i >= this.lessonInfos.length ?
+                this.lessonInfos[this.lessonInfos.length - 1] :
+                this.lessonInfos[i];
+            lesson.rooms = lessonInfo?.roomNumbers ?? [];
             lesson.lessonType = parseLessonType(lessonInfo?.lessonType);
             lesson.isOnline = lessonInfo?.isOnline ?? false;
             lessons.push(lesson);
         }
 
         return lessons;
+    }
+
+    /**
+     * TODO: Has a ton of side effects, think how can we refactor this
+     */
+    private async fixLessonData() {
+        // in some rare cases amount of lesson names, teachers and lesson infos does not match
+        // sometimes there can be no teachers or lesson infos, ex. 'АМ-01'
+
+        if (this.lessonNames.length == this.teachers.length && this.lessonNames.length == this.lessonInfos.length) {
+            // everything is ok, no need to fix
+            return;
+        } else {
+            console.warn(`${this.lessonNames.length} lessons, ${this.teachers.length} teachers, ${this.lessonInfos.length} infos in ${this.pairId}`);
+        }
+
+        const severalTeachersPerLesson = this.lessonNames.length < this.teachers.length && this.teachers.length > 0;
+
+        const lessInfosThanTeachers = this.lessonInfos.length < this.lessonNames.length && this.lessonNames.length > 0;
+
+        const severalRoomsPerLesson = this.lessonInfos.length > this.lessonNames.length && this.lessonNames.length == this.teachers.length;
+
+        const lessTeachersThanLessons = this.lessonNames.length > this.teachers.length && this.teachers.length > 0;
+
+        if (severalTeachersPerLesson && this.lessonNames.length == 1) {
+            console.debug(`handling single lesson with several teachers`);
+            this.teachers[0] = this.teachers.flat();
+        } else if (severalTeachersPerLesson && this.lessonNames.length > 1) {
+            console.debug(`handling some lessons with several teachers`);
+            // go through each teacher's schedule and group them by subject name
+            const teachersPairs = await this.getTeachersPairs(this.teachers, this.pairId);
+            const grouppedTeachers = <TeacherPair[][]>this.groupBy(teachersPairs, 'subjectName');
+            this.teachers = grouppedTeachers.map(g => g.map(t => t.teacher));
+        }
+
+        if (lessInfosThanTeachers && this.lessonInfos.length == 1) {
+            console.debug(`copying single lesson info to all lessons`)
+            this.lessonInfos = Array(this.lessonNames.length).fill(this.lessonInfos[0]);
+        }
+        else if (lessInfosThanTeachers && this.lessonInfos.length > 1) {
+            console.debug(`handling less infos than teachers`);
+            // go thorough each teacher's schedule and find info for this lesson
+            const teacherLessonInfos = await this.getTeachersLessonInfos(this.teachers, this.pairId);
+            this.lessonInfos = teacherLessonInfos;
+        }
+
+        if (severalRoomsPerLesson && this.lessonNames.length == 1) {
+            console.debug('handling one lesson with several rooms');
+            this.lessonInfos[0].roomNumbers = this.lessonInfos.flatMap(i => i.roomNumbers);
+            this.lessonInfos = [this.lessonInfos[0]];
+        } else if (severalRoomsPerLesson) {
+            console.debug('handling some lessons with several rooms');
+            // only three such cases throughout all schedules were found, this is low priority for now
+            // TODO: to handle, go through teacher's schedules and get rooms for each lesson
+        }
+
+        if (lessTeachersThanLessons && this.teachers.length == 1) {
+            console.debug('handling several lessons per single teacher');
+            // copy teacher to all lessons
+            // this can happen with physics, which has several lessons depending on current week
+            const newTeachers = Array<Array<Teacher>>(this.lessonNames.length);
+            for (let i = 0; i < newTeachers.length; i++) {
+                newTeachers[i] = this.teachers[0];
+            }
+            this.teachers = newTeachers;
+        } else if (lessTeachersThanLessons) {
+            console.debug('handling less teachers than lessons');
+            // look at teacher's schedule, distribute teachers by subject names
+            // and leave some lessons with empty teacher lists
+            const teacherPairs = await this.getTeachersPairs(this.teachers, this.pairId);
+            const newTeachers = Array<Array<Teacher>>(this.lessonNames.length);
+            for (let i = 0; i < this.lessonNames.length; i++) {
+                const lessonName = this.lessonNames[i];
+                const matchingTeacherId = teacherPairs.findIndex(p => p.subjectName == lessonName);
+                if (matchingTeacherId != -1) {
+                    newTeachers[i] = this.teachers[matchingTeacherId];
+                } else {
+                    newTeachers[i] = [];
+                }
+            }
+            this.teachers = newTeachers;
+        }
+    }
+
+    private groupBy(xs: Array<any>, key: string) {
+        const obj = xs.reduce(function (rv, x) {
+            (rv[x[key]] = rv[x[key]] || []).push(x);
+            return rv;
+        }, {});
+        return Object.keys(obj).map(k => obj[k]);
+    };
+
+    private async getTeachersLessonInfos(teachers: Teacher[][], pairId: PairIdentifier) {
+        const pairs = await this.getTeachersPairs(teachers, pairId);
+        return pairs.map(p => {
+            const info = new LessonInfo();
+            info.isOnline = p.isOnline;
+            info.lessonType = p.lessonType;
+            info.roomNumbers = [p.room];
+            return info;
+        });
+    }
+
+    private async getTeachersPairs(teachers: Teacher[][], pairId: PairIdentifier): Promise<TeacherPair[]> {
+        return await Promise.all(teachers.flat().map(async t => {
+            const teacherScheduleParser = new TeacherScheduleParser(t.scheduleUuid);
+            await teacherScheduleParser.init();
+            const teacherPair = teacherScheduleParser.parsePair(pairId);
+            teacherPair.teacher = t;
+            return teacherPair;
+        }));
     }
 
     private parseLessonNames(cell: HTMLTableCellElement): string[] {
@@ -111,7 +195,7 @@ export class PairParser implements Parser<Pair> {
             .map(a => (<HTMLLinkElement>a).title);
     }
 
-    private parseTeachers(cell: HTMLTableCellElement): Teacher[] {
+    private parseTeachers(cell: HTMLTableCellElement): Teacher[][] {
         const shortNames = Array.from(
             cell.querySelectorAll("a[href*=\"Schedules/ViewSchedule\"]"))
             .map(a => (<HTMLElement>a).innerHTML);
@@ -122,14 +206,14 @@ export class PairParser implements Parser<Pair> {
             cell.querySelectorAll("a[href*=\"Schedules/ViewSchedule\"]"))
             .map(a => (<HTMLLinkElement>a).href);
 
-        const teachers: Teacher[] = [];
+        const teachers: Teacher[][] = [];
         const scheduleLinkPrefix = "/Schedules/ViewSchedule.aspx?v=";
         for (let i = 0; i < shortNames.length; i++) {
             const teacher = new Teacher();
             teacher.shortName = shortNames[i];
             teacher.fullName = fullNames[i];
             teacher.scheduleUuid = links[i].substr(scheduleLinkPrefix.length);
-            teachers.push(teacher);
+            teachers.push([teacher]);
         }
         return teachers;
     }
@@ -157,11 +241,12 @@ export class PairParser implements Parser<Pair> {
         return infos;
     }
 
+    // In practice, lessoninfo does not contain links only if it is online lesson
     private parsePlainInfo(lessonInfoStr: string): LessonInfo {
         const lessonInfo = new LessonInfo();
         lessonInfo.isOnline = lessonInfoStr.includes("on-line");
         lessonInfo.lessonType = lessonInfoStr.split(" ")[0];
-        lessonInfo.roomNumber = "";
+        lessonInfo.roomNumbers = [];
 
         return lessonInfo;
     }
@@ -184,7 +269,7 @@ export class PairParser implements Parser<Pair> {
         const info = new LessonInfo();
         info.isOnline = isOnlineLesson;
         info.lessonType = lessonType;
-        info.roomNumber = room;
+        info.roomNumbers = [room];
         return info;
     }
 }

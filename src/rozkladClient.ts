@@ -60,7 +60,7 @@ export class RozkladClient {
 
     public async getTeacherScheduleByUuid(teacherScheduleUuid: string): Promise<string> {
         const scheduleUri = "/ViewSchedule.aspx?v=" + teacherScheduleUuid;
-        const response = await this.client.get<string>(scheduleUri, { timeout: 20000 });
+        const response = await this.client.get<string>(scheduleUri, { timeout: 60000 });
         return response.data;
     }
 }

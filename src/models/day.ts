@@ -1,11 +1,11 @@
-import { Pair } from "./pair"
+import { GroupPair } from "./groupPair"
 
 export class Day {
     dayNumber: number
     dayName: string
-    pairs: Pair[]
+    pairs: GroupPair[]
 
-    constructor(dayNumber: number, pairs: Pair[]) {
+    constructor(dayNumber: number, pairs: GroupPair[]) {
         this.dayName = Days[dayNumber];
         this.pairs = pairs;
     }

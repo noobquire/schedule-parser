@@ -3,8 +3,8 @@ import { Teacher } from "./teacher";
 export class Lesson {
     subjectName: string;
     subjectFullName: string | undefined;
-    teachers: Teacher[];
-    room: string;
+    teachers: Teacher[] = [];
+    rooms: string[] = [];
     lessonType: LessonType;
     isOnline: boolean;
 }

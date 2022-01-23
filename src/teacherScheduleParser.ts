@@ -2,7 +2,7 @@ import { RozkladClient } from "./rozkladClient";
 import { JSDOM } from "jsdom";
 import { TeacherPair } from "./models/teacherPair";
 import { LessonInfo } from "./models/lessonInfo";
-import { LessonType, parseLessonType } from "./models/lesson";
+import { parseLessonType } from "./models/lesson";
 import { PairIdentifier } from "./models/pairIdentifier";
 
 export class TeacherScheduleParser {
@@ -52,7 +52,7 @@ export class TeacherScheduleParser {
         pair.subjectName = subjectName;
         pair.subjectFullName = subjectName == subjectFullName ? undefined : subjectFullName;
         pair.lessonType = parseLessonType(lessonInfo.lessonType);
-        pair.room = lessonInfo?.roomNumber ?? "";
+        pair.room = lessonInfo?.roomNumbers[0] ?? "";
         pair.isOnline = lessonInfo?.isOnline;
 
         return pair;
@@ -78,7 +78,7 @@ export class TeacherScheduleParser {
         const lessonInfo = new LessonInfo();
         lessonInfo.isOnline = lessonInfoStr.includes("on-line");
         lessonInfo.lessonType = lessonInfoStr.split(" ")[0];
-        lessonInfo.roomNumber = "";
+        lessonInfo.roomNumbers = [];
 
         return lessonInfo;
     }
@@ -99,17 +99,16 @@ export class TeacherScheduleParser {
         const info = new LessonInfo();
         info.isOnline = isOnlineLesson;
         info.lessonType = lessonType;
-        info.roomNumber = room;
+        info.roomNumbers = [room];
         return info;
     }
 
     private parseLessonInfo(pairCell: HTMLTableCellElement): LessonInfo {
-        // TODO: simplify
         const lessonsInfoMatch = pairCell.innerHTML
             .match("(<\/a><br>|<br> |(?<!<\/span>)<br>)+(.+)$");
 
         const lessonInfoStr = lessonsInfoMatch![2]
-            .split(/(?!\d), (?!\d)/) // room map coordinates can be two numbers separated by ', ', ignore that 
+            .split(/(?!\d), (?!\d)/) // room map coordinates can be two numbers separated by ', ', regex is to ignore that 
             .map(s => s.trim())[0];
 
         const lessonInfo = lessonInfoStr.includes("maps.google.com") ?

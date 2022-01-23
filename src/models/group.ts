@@ -1,8 +1,8 @@
-import { Schedule } from "./schedule";
+import { GroupSchedule } from "./groupSchedule";
 
 export class Group {
     name: string
-    schedule: Schedule;
+    schedule: GroupSchedule;
 
     constructor(name: string) {
         this.name = name;

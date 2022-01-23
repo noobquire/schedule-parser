@@ -16,12 +16,45 @@ export class SchedulesDbClient {
         (async () => this.client.connect())();
     }
 
+    public async end() {
+        await this.client.end();
+    }
+
+    /**
+     * Returns group's latest schedule page hash, or null, if group or schedules do not exist
+     */
+    public async getGroupHashes(): Promise<Map<string, string>| undefined> {
+        try {
+
+        
+        const map = new Map<string,string>();
+        
+        const groupHashesQuery = new Query("select g.name as group_name, s.hash as schedule_hash from groups g " +
+                                           "join group_schedules s " +
+                                           "on s.group_id = g.id " +
+                                           "where s.date_parsed = (select max(sc.date_parsed) from group_schedules sc " +
+                                                                 "where sc.group_id = g.id " +
+                                                                 "group by sc.group_id)");
+        const groupHashes = await this.client.execute(groupHashesQuery);
+        for(const row of groupHashes.rows) {
+            const group_name = row[0]!.toString();
+            const schedule_hash = row[1]?.toString() ?? "";
+            map.set(group_name, schedule_hash);
+        }
+        return map;
+        } catch(e) {
+            console.error(e);
+        }
+    }
 
     public async insertSchedulesDatabase(groups: Group[]): Promise<void> {
         try {
             await this.insertGroups(groups);
             await this.insertSchedules(groups);
-        } finally {
+        } catch(error) {
+            console.error(error);
+        }
+        finally {
             this.client.end();
         }
     }
@@ -57,18 +90,33 @@ export class SchedulesDbClient {
         return group.rows[0][0]!.toString();
     }
 
-    private async isUniqueScheduleUuid(scheduleUuid: string): Promise<boolean> {
+    private async isUniqueScheduleHash(group: Group): Promise<boolean> {
         const existingGroupQuery = new Query(
-            "SELECT id FROM group_schedules WHERE rozklad_uuid = $1",
-            [scheduleUuid]
+            "SELECT hash FROM group_schedules WHERE rozklad_uuid = $1",
+            [group.schedule.uuid]
         );
-        const group = await this.client.execute(existingGroupQuery);
-        return group.rows.length == 0;
+        const hash = await this.client.execute(existingGroupQuery);
+        if(hash.rows.length == 0) {
+            return true;
+        }
+        return hash.rows[0][0] == group.schedule.hash;
+    }
+
+    private async getOrCreateTeachers(teachers: Teacher[]): Promise<string[]> {
+        const teacherUuids: string[] = [];
+        for(const teacher of teachers) {
+            if(teacher == null) {
+                teacherUuids.push(""); // TODO: might regret this
+            }
+            const teacherId = await this.createTeacherIfNotExists(teacher);
+            teacherUuids.push(teacherId);
+        }
+        return teacherUuids;
     }
 
     private async insertSchedules(groups: Group[]): Promise<void> {
         for (const group of groups) {
-            if (!await this.isUniqueScheduleUuid(group.schedule.uuid)) {
+            if (!await this.isUniqueScheduleHash(group)) {
                 console.log(`Schedule for group ${group.name} did not change, skipping`);
                 continue;
             }
@@ -78,23 +126,22 @@ export class SchedulesDbClient {
                 for (const pair of day.pairs) {
                     const pairNumber = pair.pairNumber;
                     for (const lesson of pair.lessons) {
-                        // TODO: support multiple teachers
-                        const teacherId = lesson.teachers[0] == null ? null : await this.createTeacherIfNotExists(lesson.teachers[0]);
+                        const teacherIds = await this.getOrCreateTeachers(lesson.teachers);
                         const id = uuidv4();
                         const insertLessonQuery = new Query(
-                            "INSERT INTO lessons(id, subject_name, subject_full_name, teacher_id, day, pair_number, type, schedule_id, is_online, room)" +
+                            "INSERT INTO lessons(id, subject_name, subject_full_name, teacher_ids, day, pair_number, type, schedule_id, is_online, rooms)" +
                             "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
                             [
                                 id,
                                 lesson.subjectName,
                                 lesson.subjectFullName ?? null,
-                                teacherId,
+                                teacherIds,
                                 dayName,
                                 pairNumber,
                                 lesson.lessonType,
                                 scheduleId,
                                 lesson.isOnline,
-                                lesson.room
+                                lesson.rooms
                             ]
                         );
                         const result = await this.client.execute(insertLessonQuery);
@@ -108,9 +155,9 @@ export class SchedulesDbClient {
         const groupUuid = await this.getGroupUuid(group.name);
         const scheduleId = uuidv4();
         console.log(`Inserting schedule for group ${group.name} with uuid ${group.schedule.uuid}`);
-        const insertScheduleQuery = new Query("INSERT INTO public.group_schedules(id, date_parsed, group_id, rozklad_uuid)" +
-            " VALUES ($1, current_timestamp, $2, $3)",
-            [scheduleId, groupUuid, group.schedule.uuid]);
+        const insertScheduleQuery = new Query("INSERT INTO public.group_schedules(id, date_parsed, group_id, rozklad_uuid, hash)" +
+            " VALUES ($1, current_timestamp, $2, $3, $4)",
+            [scheduleId, groupUuid, group.schedule.uuid, group.schedule.hash]);
         const result = await this.client.execute(insertScheduleQuery);
         return scheduleId;
     }

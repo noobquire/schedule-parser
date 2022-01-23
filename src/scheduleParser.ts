@@ -1,10 +1,11 @@
 import { Day } from "./models/day";
-import { Pair } from "./models/pair";
+import { GroupPair } from "./models/groupPair";
 import { PairIdentifier } from "./models/pairIdentifier";
-import { Schedule } from "./models/schedule";
+import { GroupSchedule } from "./models/groupSchedule";
 import { PairParser } from "./parsers/pairParser";
+import { Parser } from "./parsers/parser";
 
-export class ScheduleParser {
+export class ScheduleParser implements Parser<GroupSchedule> {
 
     private document: Document;
 
@@ -26,8 +27,8 @@ export class ScheduleParser {
         return true;
     }
 
-    public async parseSchedulePage(): Promise<Schedule> {
-        const schedule = new Schedule();
+    public async parse(): Promise<GroupSchedule> {
+        const schedule = new GroupSchedule();
 
         const firstWeekScheduleTable = <HTMLTableElement>this.document
             .getElementById("ctl00_MainContent_FirstScheduleTable");
@@ -49,7 +50,7 @@ export class ScheduleParser {
         const week: Day[] = [];
 
         for (let dayId = 0; dayId < 6; dayId++) {
-            const dayPairs: Pair[] = [];
+            const dayPairs: GroupPair[] = [];
             for (let pairId = 0; pairId < 6; pairId++) {
                 const scheduleCell = scheduleTable.rows[pairId + 1].cells[dayId + 1];
                 const pairIdentifier = new PairIdentifier(pairId, dayId, weekNumber, 1);
@@ -57,7 +58,7 @@ export class ScheduleParser {
                 const pair = await pairParser.parse();
                 dayPairs.push(pair);
             }
-            const day = new Day(dayId+1, dayPairs);
+            const day = new Day(dayId, dayPairs);
             week.push(day);
         }
 

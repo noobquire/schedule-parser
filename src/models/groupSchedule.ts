@@ -1,9 +1,10 @@
-import { Day, Days } from "./day";
+import { Day } from "./day";
 
-export class Schedule {
-    firstWeek: Day[];
-    secondWeek: Day[];
+export class GroupSchedule {
+    firstWeek: Day[] = [];
+    secondWeek: Day[] = [];
     uuid: string;
+    hash: string;
 
     public isEmpty(): boolean {
         let firstWeekEmpty: boolean = this.weekIsEmpty(this.firstWeek);

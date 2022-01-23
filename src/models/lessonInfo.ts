@@ -1,5 +1,5 @@
 export class LessonInfo {
-    roomNumber: string | undefined;
+    roomNumbers: string[];
     lessonType: string;
     isOnline: boolean;
 }

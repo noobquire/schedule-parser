@@ -5,8 +5,9 @@ import { GroupSelectionParser } from './groupSelectionParser';
 import { Group } from './models/group';
 import { SchedulesDbClient } from './schedulesDb';
 import { RozkladClient } from './rozkladClient';
+import { Md5 } from 'ts-md5';
 
-const ukrainianAlphabet = "і"; //"абвгдеєжзиіїйклмнопрстуфхцчшщюя"; //  
+const ukrainianAlphabet = "абвгдеєжзиіїйклмнопрстуфхцчшщюя"; 
 let validationToken: string;
 let rozkladClient: RozkladClient;
 
@@ -52,6 +53,16 @@ function distinctCaseInsensitive(value: string, index: number, self: string[]) {
     return self.map(s => s.toLowerCase()).indexOf(value.toLowerCase()) === index;
 }
 
+async function getGroupHashes(): Promise<Map<string, string>> {
+    const client = new SchedulesDbClient();
+    try {
+        const hashes = await client.getGroupHashes();
+        return hashes!;
+    } finally {
+        await client.end();
+    }
+}
+
 async function getValidationToken(): Promise<string> {
     const groupSelectionHtml = await rozkladClient.getGroupScheduleSelectionPage();
     const document = new JSDOM(groupSelectionHtml).window.document;
@@ -82,28 +93,30 @@ async function getConflictingNamesGroupSchedules(groupName: string, groupSelecti
         const group = groups[i];
         console.log(`(${i + 1}/${groups.length}) Parsing schedule for group ${group.name}`);
         const groupPageHtml = await rozkladClient.getGroupScheduleByUuid(group.schedule.uuid);
+        
         const groupDocument = new JSDOM(groupPageHtml).window.document;
         const scheduleParser = new ScheduleParser(groupDocument);
-        const schedule = await scheduleParser.parseSchedulePage();
+        const schedule = await scheduleParser.parse();
         const scheduleUuid = group.schedule.uuid;
+        const scheduleHash = Md5.hashStr(JSON.stringify(schedule));
         schedule.uuid = scheduleUuid;
+        schedule.hash = scheduleHash;
         group.schedule = schedule;
     }
 
     // due to inconsistent group naming, handle some rare cases:
-    const nonEmptyGroups = groups.filter(g => !g.schedule.isEmpty());
+    let nonEmptyGroups = groups.filter(g => !g.schedule.isEmpty());
     // if only one group has non-empty schedule
     if (nonEmptyGroups.length == 1) {
         console.log('Conflicting group names were duplicates, using non-empty schedule with default name');
         // use default group name without cathedra in brackets
         nonEmptyGroups[0].name = groupName;
-        return nonEmptyGroups;
     } // if all confliting groups have empty schedules
     else if (nonEmptyGroups.length == 0) {
         console.log('Conflicting group schedules were empty, using default name');
         // use only one default group name for empty groups list
         groups[0].name = groupName;
-        return [groups[0]];
+        nonEmptyGroups = [groups[0]];
     } // if several conflicting groups with same name have non-empty schedules
     else if (containsDuplicateNames(nonEmptyGroups)) {
         console.log('Conflicting group schedules had duplicate names, adding indexes to them');
@@ -112,10 +125,9 @@ async function getConflictingNamesGroupSchedules(groupName: string, groupSelecti
             const group = nonEmptyGroups[i];
             group.name += ` #${i + 1}`;
         }
-        return nonEmptyGroups;
-    } else {
-        return nonEmptyGroups;
     }
+
+    return nonEmptyGroups;
 }
 
 // returns all group schedules for groups with such name
@@ -145,7 +157,9 @@ async function getGroupSchedule(groupName: string): Promise<Group[]> {
         }
 
         const scheduleParser = new ScheduleParser(document);
-        const schedule = await scheduleParser.parseSchedulePage();
+        const schedule = await scheduleParser.parse();
+        const scheduleHash = Md5.hashStr(JSON.stringify(schedule));
+        schedule.hash = scheduleHash;
 
         const group = new Group(groupName);
         group.schedule = schedule;
